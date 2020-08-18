@@ -1,10 +1,9 @@
-﻿using Microsoft.WindowsAzure.Storage;
-using Microsoft.WindowsAzure.Storage.Blob;
+﻿using Microsoft.Azure.Storage;
+using Microsoft.Azure.Storage.Blob;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Security.Cryptography;
-using System.Text;
 using System.Threading.Tasks;
 
 namespace BlobSync
@@ -22,13 +21,16 @@ namespace BlobSync
             LocalPath = localPath;
         }
 
-        private async Task<List<IListBlobItem>> ListBlobsAsync(CloudBlobContainer container)
+        public static async Task<List<IListBlobItem>> ListBlobsAsync(CloudBlobContainer container, string prefix)
         {
+            var options = new BlobRequestOptions();
+            var context = new OperationContext();
+
             BlobContinuationToken continuationToken = null;
             List<IListBlobItem> results = new List<IListBlobItem>();
             do
             {
-                var response = await container.ListBlobsSegmentedAsync(continuationToken);
+                var response = await container.ListBlobsSegmentedAsync(prefix, true, BlobListingDetails.None, null, continuationToken, options, context);
                 continuationToken = response.ContinuationToken;
                 results.AddRange(response.Results);
             }
@@ -42,7 +44,7 @@ namespace BlobSync
             var client = account.CreateCloudBlobClient();
             var container = client.GetContainerReference(ContainerName);
 
-            var blobs = await ListBlobsAsync(container);
+            var blobs = await ListBlobsAsync(container, "");
             var syncInfo = new BlobSyncInfo();
             var seenBlobNames = new HashSet<string>();
 
@@ -79,7 +81,9 @@ namespace BlobSync
             }
 
             // look at all files, identify those that have no corresponding blob and put them in the onlyLocal category
-            foreach (var filePath in Directory.EnumerateFiles(LocalPath))
+            var options = new EnumerationOptions();
+            options.RecurseSubdirectories = true;
+            foreach (var filePath in Directory.EnumerateFiles(LocalPath, "*", options))
             {
                 var fileName = Path.GetFileName(filePath);
 

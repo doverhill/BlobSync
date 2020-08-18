@@ -1,8 +1,7 @@
-﻿using Microsoft.WindowsAzure.Storage;
+﻿using Microsoft.Azure.Storage;
+using Microsoft.Azure.Storage.Blob;
 using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Text;
 using System.Threading.Tasks;
 
 namespace BlobSync
@@ -29,7 +28,9 @@ namespace BlobSync
             {
                 Console.WriteLine($"Downloading {onlyRemote.Name}...");
                 var blob = container.GetBlockBlobReference(onlyRemote.Name);
-                await blob.DownloadToFileAsync(Path.Combine(localPath, onlyRemote.Name), FileMode.Create);
+                var path = Path.Combine(localPath, onlyRemote.Name);
+                Directory.CreateDirectory(Path.GetDirectoryName(path));
+                await blob.DownloadToFileAsync(path, FileMode.Create);
             }
 
             foreach (var differs in syncInfo.Differs)
