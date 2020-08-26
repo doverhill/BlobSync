@@ -85,7 +85,7 @@ namespace BlobSync
             options.RecurseSubdirectories = true;
             foreach (var filePath in Directory.EnumerateFiles(LocalPath, "*", options))
             {
-                var fileName = Path.GetFileName(filePath);
+                var fileName = Path.GetRelativePath(LocalPath, filePath).Replace("\\", "/");
 
                 if (!seenBlobNames.Contains(fileName))
                 {

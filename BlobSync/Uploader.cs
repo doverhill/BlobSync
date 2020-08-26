@@ -1,6 +1,7 @@
 ﻿using Microsoft.Azure.Storage;
 using Microsoft.Azure.Storage.Blob;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
 
@@ -17,6 +18,13 @@ namespace BlobSync
 
         public static async Task Sync(string connectionString, string containerName, string localPath, SyncSettings settings)
         {
+            var contentTypeMappings = new Dictionary<string, string>
+            {
+                { ".html", "text/html" },
+                { ".css", "text/css" },
+                { ".wasm", "application/wasm" }
+            };
+
             var sync = new BlobSyncCore(connectionString, containerName, localPath);
             var syncInfo = await sync.GetSyncInfoAsync();
 
@@ -51,9 +59,19 @@ namespace BlobSync
             foreach (var onlyLocal in syncInfo.OnlyLocal)
             {
                 // this file exists only locally so upload it as a blob
-                Console.WriteLine($"Uploading blob {onlyLocal}...");
                 var blob = container.GetBlockBlobReference(onlyLocal);
+                ApplyContentType(blob, contentTypeMappings);
+                Console.WriteLine($"Uploading blob {onlyLocal} [{blob.Properties.ContentType}]...");
                 await blob.UploadFromFileAsync(Path.Combine(localPath, onlyLocal));
+            }
+        }
+
+        private static void ApplyContentType(CloudBlockBlob blob, Dictionary<string, string> contentTypeMappings)
+        {
+            var suffix = Path.GetExtension(blob.Name);
+            if (contentTypeMappings.ContainsKey(suffix))
+            {
+                blob.Properties.ContentType = contentTypeMappings[suffix];
             }
         }
     }
