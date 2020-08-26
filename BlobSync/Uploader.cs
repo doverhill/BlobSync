@@ -46,8 +46,9 @@ namespace BlobSync
             foreach (var differs in syncInfo.Differs)
             {
                 // this file exists also as a blob but differs, upload and overwrite
-                Console.WriteLine($"Updating blob {differs.Name}...");
                 var blob = container.GetBlockBlobReference(differs.Name);
+                ApplyContentType(blob, contentTypeMappings);
+                Console.WriteLine($"Updating blob {differs.Name} [{blob.Properties.ContentType}]...");
                 await blob.UploadFromFileAsync(Path.Combine(localPath, differs.Name));
             }
 
