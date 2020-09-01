@@ -13,7 +13,8 @@ namespace BlobSync
         public enum SyncSettings
         {
             Default = 0,
-            Delete = 1
+            Delete = 1,
+            Force = 2
         }
 
         public static async Task Sync(string connectionString, string containerName, string localPath, SyncSettings settings)
@@ -22,6 +23,7 @@ namespace BlobSync
             {
                 { ".html", "text/html" },
                 { ".css", "text/css" },
+                { ".js", "text/javascript" },
                 { ".wasm", "application/wasm" }
             };
 
@@ -32,7 +34,7 @@ namespace BlobSync
             var client = account.CreateCloudBlobClient();
             var container = client.GetContainerReference(containerName);
 
-            if ((settings & SyncSettings.Delete) != 0)
+            if (settings.HasFlag(SyncSettings.Delete))
             {
                 foreach (var onlyRemote in syncInfo.OnlyRemote)
                 {
@@ -46,25 +48,48 @@ namespace BlobSync
             foreach (var differs in syncInfo.Differs)
             {
                 // this file exists also as a blob but differs, upload and overwrite
-                var blob = container.GetBlockBlobReference(differs.Name);
-                ApplyContentType(blob, contentTypeMappings);
-                Console.WriteLine($"Updating blob {differs.Name} [{blob.Properties.ContentType}]...");
-                await blob.UploadFromFileAsync(Path.Combine(localPath, differs.Name));
-            }
-
-            foreach (var identical in syncInfo.Identical)
-            {
-                // this file exists also as a blob and is identical, don't do anything
+                await PushFile("Updating", localPath, contentTypeMappings, container, differs.Blob, differs.File);
             }
 
             foreach (var onlyLocal in syncInfo.OnlyLocal)
             {
                 // this file exists only locally so upload it as a blob
-                var blob = container.GetBlockBlobReference(onlyLocal);
-                ApplyContentType(blob, contentTypeMappings);
-                Console.WriteLine($"Uploading blob {onlyLocal} [{blob.Properties.ContentType}]...");
-                await blob.UploadFromFileAsync(Path.Combine(localPath, onlyLocal));
+                await PushFile("Uploading", localPath, contentTypeMappings, container, onlyLocal);
             }
+
+            if (settings.HasFlag(SyncSettings.Force))
+            {
+                foreach (var identical in syncInfo.Identical)
+                {
+                    // this file exists also as a blob and is identical, don't do anything
+                    await PushFile("Force updating", localPath, contentTypeMappings, container, identical.Blob, identical.File);
+                }
+            }
+        }
+
+        private static async Task PushFile(string verb, string localPath, Dictionary<string, string> contentTypeMappings, CloudBlobContainer container, CloudBlockBlob obj, FileData file)
+        {
+            var blob = container.GetBlockBlobReference(obj.Name);
+            ApplyContentType(blob, contentTypeMappings);
+            ApplyCaching(blob, file);
+            Console.WriteLine($"{verb} blob {obj.Name} [{blob.Properties.ContentType}]...");
+            await blob.UploadFromFileAsync(Path.Combine(localPath, obj.Name));
+            await blob.SetPropertiesAsync();
+        }
+
+        private static async Task PushFile(string verb, string localPath, Dictionary<string, string> contentTypeMappings, CloudBlobContainer container, FileData file)
+        {
+            var blob = container.GetBlockBlobReference(file.Name);
+            ApplyContentType(blob, contentTypeMappings);
+            ApplyCaching(blob, file);
+            Console.WriteLine($"{verb} blob {file.Name} [{blob.Properties.ContentType}]...");
+            await blob.UploadFromFileAsync(Path.Combine(localPath, file.Name));
+            await blob.SetPropertiesAsync();
+        }
+
+        private static void ApplyCaching(CloudBlockBlob blob, FileData file)
+        {
+            blob.Properties.CacheControl = "max-age=600";
         }
 
         private static void ApplyContentType(CloudBlockBlob blob, Dictionary<string, string> contentTypeMappings)

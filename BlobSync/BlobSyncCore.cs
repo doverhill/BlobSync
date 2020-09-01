@@ -65,11 +65,11 @@ namespace BlobSync
                         if (fileInfo.MD5 == blockBlob.Properties.ContentMD5 &&
                             fileInfo.Length == blockBlob.Properties.Length)
                         {
-                            syncInfo.Identical.Add(blockBlob);
+                            syncInfo.Identical.Add((blockBlob, fileInfo));
                         }
                         else
                         {
-                            syncInfo.Differs.Add(blockBlob);
+                            syncInfo.Differs.Add((blockBlob, fileInfo));
                         }
                     }
                     else
@@ -89,7 +89,8 @@ namespace BlobSync
 
                 if (!seenBlobNames.Contains(fileName))
                 {
-                    syncInfo.OnlyLocal.Add(fileName);
+                    var fileInfo = GetFileData(fileName);
+                    syncInfo.OnlyLocal.Add(fileInfo);
                 }
             }
 
@@ -101,6 +102,7 @@ namespace BlobSync
             var fileData = new FileData();
 
             var fileInfo = new FileInfo(localPath);
+            fileData.Name = localPath;
             fileData.Length = fileInfo.Length;
 
             using (var md5 = MD5.Create())

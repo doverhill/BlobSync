@@ -6,8 +6,8 @@ namespace BlobSync
     public class BlobSyncInfo
     {
         public List<CloudBlockBlob> OnlyRemote = new List<CloudBlockBlob>();
-        public List<CloudBlockBlob> Differs = new List<CloudBlockBlob>();
-        public List<CloudBlockBlob> Identical = new List<CloudBlockBlob>();
-        public List<string> OnlyLocal = new List<string>();
+        public List<(CloudBlockBlob Blob, FileData File)> Differs = new List<(CloudBlockBlob Blob, FileData File)>();
+        public List<(CloudBlockBlob Blob, FileData File)> Identical = new List<(CloudBlockBlob Blob, FileData File)>();
+        public List<FileData> OnlyLocal = new List<FileData>();
     }
 }

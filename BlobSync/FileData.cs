@@ -1,7 +1,8 @@
 ﻿namespace BlobSync
 {
-    internal class FileData
+    public class FileData
     {
+        public string Name;
         public long Length;
         public string MD5;
     }

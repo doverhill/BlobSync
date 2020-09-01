@@ -12,7 +12,8 @@ namespace BlobSync
         public enum SyncSettings
         {
             Default = 0,
-            Delete = 1
+            Delete = 1,
+            Force = 2
         }
 
         public static async Task Sync(string connectionString, string containerName, string localPath, SyncSettings settings)
@@ -35,13 +36,9 @@ namespace BlobSync
 
             foreach (var differs in syncInfo.Differs)
             {
-                Console.WriteLine($"Updating {differs.Name}...");
-                var blob = container.GetBlockBlobReference(differs.Name);
-                await blob.DownloadToFileAsync(Path.Combine(localPath, differs.Name), FileMode.Create);
-            }
-
-            foreach (var identical in syncInfo.Identical)
-            {
+                Console.WriteLine($"Updating {differs.Blob.Name}...");
+                var blob = container.GetBlockBlobReference(differs.Blob.Name);
+                await blob.DownloadToFileAsync(Path.Combine(localPath, differs.Blob.Name), FileMode.Create);
             }
 
             if ((settings & SyncSettings.Delete) != 0)
@@ -49,8 +46,12 @@ namespace BlobSync
                 foreach (var onlyLocal in syncInfo.OnlyLocal)
                 {
                     Console.WriteLine($"Deleting {onlyLocal}...");
-                    File.Delete(Path.Combine(localPath, onlyLocal));
+                    File.Delete(Path.Combine(localPath, onlyLocal.Name));
                 }
+            }
+
+            foreach (var identical in syncInfo.Identical)
+            {
             }
         }
     }
