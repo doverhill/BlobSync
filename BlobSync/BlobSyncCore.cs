@@ -1,5 +1,5 @@
-﻿using Microsoft.Azure.Storage;
-using Microsoft.Azure.Storage.Blob;
+﻿using Azure.Storage.Blobs;
+using Azure.Storage.Blobs.Models;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -11,72 +11,92 @@ namespace BlobSync
     public class BlobSyncCore
     {
         private string ConnectionString;
+        private string ConnectionUrl;
         private string ContainerName;
         private string LocalPath;
 
-        public BlobSyncCore(string connectionString, string containerName, string localPath)
+        public BlobSyncCore(string connectionString, string connectionUrl, string containerName, string localPath)
         {
             ConnectionString = connectionString;
+            ConnectionUrl = connectionUrl;
             ContainerName = containerName;
             LocalPath = localPath;
         }
 
-        public static async Task<List<IListBlobItem>> ListBlobsAsync(CloudBlobContainer container, string prefix)
+        public static async IAsyncEnumerable<BlobItem> ListBlobsAsync(BlobContainerClient container, string prefix)
         {
-            var options = new BlobRequestOptions();
-            var context = new OperationContext();
-
-            BlobContinuationToken continuationToken = null;
-            List<IListBlobItem> results = new List<IListBlobItem>();
-            do
+            await foreach (var blobItem in container.GetBlobsAsync(prefix: prefix))
             {
-                var response = await container.ListBlobsSegmentedAsync(prefix, true, BlobListingDetails.None, null, continuationToken, options, context);
-                continuationToken = response.ContinuationToken;
-                results.AddRange(response.Results);
+                yield return blobItem;
             }
-            while (continuationToken != null);
-            return results;
+        }
+
+        public static async Task<string> DownloadBlobText(BlobClient blob)
+        {
+            var download = await blob.DownloadAsync();
+            var reader = new StreamReader(download.Value.Content);
+            return reader.ReadToEnd();
+        }
+
+        public static async Task UploadBlobText(BlobClient blob, string text)
+        {
+            var stream = new MemoryStream();
+            var writer = new StreamWriter(stream);
+            writer.Write(text);
+            writer.Flush();
+            stream.Position = 0;
+            await blob.UploadAsync(stream);
         }
 
         public async Task<BlobSyncInfo> GetSyncInfoAsync()
         {
-            var account = CloudStorageAccount.Parse(ConnectionString);
-            var client = account.CreateCloudBlobClient();
-            var container = client.GetContainerReference(ContainerName);
+            BlobServiceClient client;
 
-            var blobs = await ListBlobsAsync(container, "");
+            if (ConnectionUrl != null)
+            {
+                client = new BlobServiceClient(new Uri(ConnectionUrl));
+            }
+            else
+            {
+                client = new BlobServiceClient(ConnectionString);
+            }
+            var container = client.GetBlobContainerClient(ContainerName);
+
+            var blobs = ListBlobsAsync(container, "");
             var syncInfo = new BlobSyncInfo();
             var seenBlobNames = new HashSet<string>();
 
             // look at all blobs and place them in the correct category
-            foreach (var blob in blobs)
+            await foreach (var item in blobs)
             {
-                if (blob is CloudBlockBlob)
-                {
-                    var blockBlob = (CloudBlockBlob)blob;
-                    seenBlobNames.Add(blockBlob.Name);
+                //var blockBlob = container.GetBlobClient(item.Name);
+                seenBlobNames.Add(item.Name);
 
-                    // does the file exist?
-                    var localPath = Path.Combine(LocalPath, blockBlob.Name);
-                    if (File.Exists(localPath))
+                //var blobProperties = blockBlob.GetProperties().Value;
+
+                // does the file exist?
+                var localPath = Path.Combine(LocalPath, item.Name);
+                if (File.Exists(localPath))
+                {
+                    // is the same? look at length and md5
+                    var fileInfo = GetFileData(LocalPath, localPath);
+                    if (fileInfo.MD5 == Convert.ToBase64String(item.Properties.ContentHash) &&
+                        fileInfo.Length == item.Properties.ContentLength)
                     {
-                        // is the same? look at length and md5
-                        var fileInfo = GetFileData(localPath);
-                        if (fileInfo.MD5 == blockBlob.Properties.ContentMD5 &&
-                            fileInfo.Length == blockBlob.Properties.Length)
-                        {
-                            syncInfo.Identical.Add((blockBlob, fileInfo));
-                        }
-                        else
-                        {
-                            syncInfo.Differs.Add((blockBlob, fileInfo));
-                        }
+                        var blockBlob = container.GetBlobClient(item.Name);
+                        syncInfo.Identical.Add((blockBlob, fileInfo));
                     }
                     else
                     {
-                        // file does not exist locally
-                        syncInfo.OnlyRemote.Add(blockBlob);
+                        var blockBlob = container.GetBlobClient(item.Name);
+                        syncInfo.Differs.Add((blockBlob, fileInfo));
                     }
+                }
+                else
+                {
+                    // file does not exist locally
+                    var blockBlob = container.GetBlobClient(item.Name);
+                    syncInfo.OnlyRemote.Add(blockBlob);
                 }
             }
 
@@ -89,7 +109,7 @@ namespace BlobSync
 
                 if (!seenBlobNames.Contains(fileName))
                 {
-                    var fileInfo = GetFileData(fileName);
+                    var fileInfo = GetFileData(LocalPath, Path.Combine(LocalPath, fileName));
                     syncInfo.OnlyLocal.Add(fileInfo);
                 }
             }
@@ -97,12 +117,12 @@ namespace BlobSync
             return syncInfo;
         }
 
-        private FileData GetFileData(string localPath)
+        private FileData GetFileData(string basePath, string localPath)
         {
             var fileData = new FileData();
 
             var fileInfo = new FileInfo(localPath);
-            fileData.Name = localPath;
+            fileData.Name = Path.GetRelativePath(basePath, localPath);
             fileData.Length = fileInfo.Length;
 
             using (var md5 = MD5.Create())

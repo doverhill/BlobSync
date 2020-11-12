@@ -1,5 +1,5 @@
-﻿using Microsoft.Azure.Storage;
-using Microsoft.Azure.Storage.Blob;
+﻿using Azure.Storage.Blobs;
+using Azure.Storage.Blobs.Models;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -17,7 +17,7 @@ namespace BlobSync
             Force = 2
         }
 
-        public static async Task Sync(string connectionString, string containerName, string localPath, SyncSettings settings)
+        public static async Task Sync(string connectionString, string connectionUrl, string containerName, string localPath, SyncSettings settings)
         {
             var contentTypeMappings = new Dictionary<string, string>
             {
@@ -27,12 +27,19 @@ namespace BlobSync
                 { ".wasm", "application/wasm" }
             };
 
-            var sync = new BlobSyncCore(connectionString, containerName, localPath);
+            var sync = new BlobSyncCore(connectionString, connectionUrl, containerName, localPath);
             var syncInfo = await sync.GetSyncInfoAsync();
 
-            var account = CloudStorageAccount.Parse(connectionString);
-            var client = account.CreateCloudBlobClient();
-            var container = client.GetContainerReference(containerName);
+            BlobServiceClient client;
+            if (connectionUrl != null)
+            {
+                client = new BlobServiceClient(new Uri(connectionUrl));
+            }
+            else
+            {
+                client = new BlobServiceClient(connectionString);
+            }
+            var container = client.GetBlobContainerClient(containerName);
 
             if (settings.HasFlag(SyncSettings.Delete))
             {
@@ -40,7 +47,7 @@ namespace BlobSync
                 {
                     // this file exists only as a blob, delete the blob
                     Console.WriteLine($"Deleting blob {onlyRemote.Name}...");
-                    var blob = container.GetBlobReference(onlyRemote.Name);
+                    var blob = container.GetBlobClient(onlyRemote.Name);
                     await blob.DeleteIfExistsAsync();
                 }
             }
@@ -48,7 +55,7 @@ namespace BlobSync
             foreach (var differs in syncInfo.Differs)
             {
                 // this file exists also as a blob but differs, upload and overwrite
-                await PushFile("Updating", localPath, contentTypeMappings, container, differs.Blob, differs.File);
+                await PushFile("Updating", localPath, contentTypeMappings, differs.Blob);
             }
 
             foreach (var onlyLocal in syncInfo.OnlyLocal)
@@ -62,43 +69,55 @@ namespace BlobSync
                 foreach (var identical in syncInfo.Identical)
                 {
                     // this file exists also as a blob and is identical, don't do anything
-                    await PushFile("Force updating", localPath, contentTypeMappings, container, identical.Blob, identical.File);
+                    await PushFile("Force updating", localPath, contentTypeMappings, identical.Blob);
                 }
             }
         }
 
-        private static async Task PushFile(string verb, string localPath, Dictionary<string, string> contentTypeMappings, CloudBlobContainer container, CloudBlockBlob obj, FileData file)
+        private static async Task PushFile(string verb, string localPath, Dictionary<string, string> contentTypeMappings, BlobClient blob)
         {
-            var blob = container.GetBlockBlobReference(obj.Name);
-            ApplyContentType(blob, contentTypeMappings);
-            ApplyCaching(blob, file);
-            Console.WriteLine($"{verb} blob {obj.Name} [{blob.Properties.ContentType}]...");
-            await blob.UploadFromFileAsync(Path.Combine(localPath, obj.Name));
-            await blob.SetPropertiesAsync();
+            //var blob = container.GetBlockBlobReference(obj.Name);
+            var contentType = await ApplyProperties(blob, contentTypeMappings);
+            Console.WriteLine($"{verb} blob {blob.Name} [{contentType}]...");
+            var localFile = File.OpenRead(Path.Combine(localPath, blob.Name));
+            await blob.UploadAsync(localFile);
         }
 
-        private static async Task PushFile(string verb, string localPath, Dictionary<string, string> contentTypeMappings, CloudBlobContainer container, FileData file)
+        private static async Task PushFile(string verb, string localPath, Dictionary<string, string> contentTypeMappings, BlobContainerClient container, FileData file)
         {
-            var blob = container.GetBlockBlobReference(file.Name);
-            ApplyContentType(blob, contentTypeMappings);
-            ApplyCaching(blob, file);
-            Console.WriteLine($"{verb} blob {file.Name} [{blob.Properties.ContentType}]...");
-            await blob.UploadFromFileAsync(Path.Combine(localPath, file.Name));
-            await blob.SetPropertiesAsync();
+            var blob = container.GetBlobClient(file.Name);
+            var contentType = await ApplyProperties(blob, contentTypeMappings);
+            Console.WriteLine($"{verb} blob {file.Name} [{contentType}]...");
+            var localFile = File.OpenRead(Path.Combine(localPath, file.Name));
+            await blob.UploadAsync(localFile);
         }
 
-        private static void ApplyCaching(CloudBlockBlob blob, FileData file)
-        {
-            blob.Properties.CacheControl = "max-age=600";
-        }
-
-        private static void ApplyContentType(CloudBlockBlob blob, Dictionary<string, string> contentTypeMappings)
+        private static async Task<string> ApplyProperties(BlobClient blob, Dictionary<string, string> contentTypeMappings)
         {
             var suffix = Path.GetExtension(blob.Name);
+            string contentType = null;
             if (contentTypeMappings.ContainsKey(suffix))
             {
-                blob.Properties.ContentType = contentTypeMappings[suffix];
+                contentType = contentTypeMappings[suffix];
             }
+
+            // Get the existing properties
+            BlobProperties properties = await blob.GetPropertiesAsync();
+
+            BlobHttpHeaders headers = new BlobHttpHeaders
+            {
+                ContentType = contentType ?? properties.ContentType,
+                ContentLanguage = properties.ContentLanguage,
+                CacheControl = properties.CacheControl,
+                ContentDisposition = properties.ContentDisposition,
+                ContentEncoding = properties.ContentEncoding,
+                ContentHash = properties.ContentHash
+            };
+
+            // Set the blob's properties.
+            await blob.SetHttpHeadersAsync(headers);
+
+            return contentType ?? "";
         }
     }
 }

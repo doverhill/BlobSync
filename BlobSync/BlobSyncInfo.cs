@@ -1,13 +1,13 @@
-﻿using Microsoft.Azure.Storage.Blob;
+﻿using Azure.Storage.Blobs;
 using System.Collections.Generic;
 
 namespace BlobSync
 {
     public class BlobSyncInfo
     {
-        public List<CloudBlockBlob> OnlyRemote = new List<CloudBlockBlob>();
-        public List<(CloudBlockBlob Blob, FileData File)> Differs = new List<(CloudBlockBlob Blob, FileData File)>();
-        public List<(CloudBlockBlob Blob, FileData File)> Identical = new List<(CloudBlockBlob Blob, FileData File)>();
+        public List<BlobClient> OnlyRemote = new List<BlobClient>();
+        public List<(BlobClient Blob, FileData File)> Differs = new List<(BlobClient Blob, FileData File)>();
+        public List<(BlobClient Blob, FileData File)> Identical = new List<(BlobClient Blob, FileData File)>();
         public List<FileData> OnlyLocal = new List<FileData>();
     }
 }

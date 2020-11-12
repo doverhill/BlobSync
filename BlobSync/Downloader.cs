@@ -1,5 +1,4 @@
-﻿using Microsoft.Azure.Storage;
-using Microsoft.Azure.Storage.Blob;
+﻿using Azure.Storage.Blobs;
 using System;
 using System.IO;
 using System.Threading.Tasks;
@@ -16,29 +15,44 @@ namespace BlobSync
             Force = 2
         }
 
-        public static async Task Sync(string connectionString, string containerName, string localPath, SyncSettings settings)
+        public static async Task Sync(string connectionString, string connectionUrl, string containerName, string localPath, SyncSettings settings)
         {
-            var sync = new BlobSyncCore(connectionString, containerName, localPath);
+            var sync = new BlobSyncCore(connectionString, connectionUrl, containerName, localPath);
             var syncInfo = await sync.GetSyncInfoAsync();
 
-            var account = CloudStorageAccount.Parse(connectionString);
-            var client = account.CreateCloudBlobClient();
-            var container = client.GetContainerReference(containerName);
+            BlobServiceClient client;
+            if (connectionUrl != null)
+            {
+                client = new BlobServiceClient(new Uri(connectionUrl));
+            }
+            else
+            {
+                client = new BlobServiceClient(connectionString);
+            }
+            var container = client.GetBlobContainerClient(containerName);
 
             foreach (var onlyRemote in syncInfo.OnlyRemote)
             {
                 Console.WriteLine($"Downloading {onlyRemote.Name}...");
-                var blob = container.GetBlockBlobReference(onlyRemote.Name);
+                var blob = container.GetBlobClient(onlyRemote.Name);
                 var path = Path.Combine(localPath, onlyRemote.Name);
                 Directory.CreateDirectory(Path.GetDirectoryName(path));
-                await blob.DownloadToFileAsync(path, FileMode.Create);
+
+                using (var file = File.OpenWrite(path))
+                {
+                    await blob.DownloadToAsync(file);
+                }
             }
 
             foreach (var differs in syncInfo.Differs)
             {
                 Console.WriteLine($"Updating {differs.Blob.Name}...");
-                var blob = container.GetBlockBlobReference(differs.Blob.Name);
-                await blob.DownloadToFileAsync(Path.Combine(localPath, differs.Blob.Name), FileMode.Create);
+                var blob = container.GetBlobClient(differs.Blob.Name);
+
+                using (var file = File.OpenWrite(Path.Combine(localPath, differs.Blob.Name)))
+                {
+                    await blob.DownloadToAsync(file);
+                }
             }
 
             if ((settings & SyncSettings.Delete) != 0)
