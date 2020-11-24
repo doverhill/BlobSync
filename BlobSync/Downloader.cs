@@ -63,10 +63,6 @@ namespace BlobSync
                     File.Delete(Path.Combine(localPath, onlyLocal.Name));
                 }
             }
-
-            foreach (var identical in syncInfo.Identical)
-            {
-            }
         }
     }
 }

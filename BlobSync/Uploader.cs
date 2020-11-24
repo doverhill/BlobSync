@@ -77,19 +77,23 @@ namespace BlobSync
         private static async Task PushFile(string verb, string localPath, Dictionary<string, string> contentTypeMappings, BlobClient blob)
         {
             //var blob = container.GetBlockBlobReference(obj.Name);
+            using (var localFile = File.OpenRead(Path.Combine(localPath, blob.Name)))
+            {
+                await blob.UploadAsync(localFile, overwrite: true);
+            }
             var contentType = await ApplyProperties(blob, contentTypeMappings);
             Console.WriteLine($"{verb} blob {blob.Name} [{contentType}]...");
-            var localFile = File.OpenRead(Path.Combine(localPath, blob.Name));
-            await blob.UploadAsync(localFile, overwrite: true);
         }
 
         private static async Task PushFile(string verb, string localPath, Dictionary<string, string> contentTypeMappings, BlobContainerClient container, FileData file)
         {
             var blob = container.GetBlobClient(file.Name);
+            using (var localFile = File.OpenRead(Path.Combine(localPath, file.Name)))
+            {
+                await blob.UploadAsync(localFile, overwrite: true);
+            }
             var contentType = await ApplyProperties(blob, contentTypeMappings);
             Console.WriteLine($"{verb} blob {file.Name} [{contentType}]...");
-            var localFile = File.OpenRead(Path.Combine(localPath, file.Name));
-            await blob.UploadAsync(localFile, overwrite: true);
         }
 
         private static async Task<string> ApplyProperties(BlobClient blob, Dictionary<string, string> contentTypeMappings)
