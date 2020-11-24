@@ -46,7 +46,7 @@ namespace BlobSync
 
             foreach (var differs in syncInfo.Differs)
             {
-                Console.WriteLine($"Updating {differs.Blob.Name}...");
+                Console.WriteLine($"Updating local {differs.Blob.Name}...");
                 var blob = container.GetBlobClient(differs.Blob.Name);
 
                 using (var file = File.OpenWrite(Path.Combine(localPath, differs.Blob.Name)))
@@ -59,7 +59,7 @@ namespace BlobSync
             {
                 foreach (var onlyLocal in syncInfo.OnlyLocal)
                 {
-                    Console.WriteLine($"Deleting {onlyLocal}...");
+                    Console.WriteLine($"Deleting local {onlyLocal}...");
                     File.Delete(Path.Combine(localPath, onlyLocal.Name));
                 }
             }

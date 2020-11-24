@@ -45,7 +45,7 @@ namespace BlobSync
             writer.Write(text);
             writer.Flush();
             stream.Position = 0;
-            await blob.UploadAsync(stream);
+            await blob.UploadAsync(stream, overwrite: true);
         }
 
         public async Task<BlobSyncInfo> GetSyncInfoAsync()
@@ -69,10 +69,7 @@ namespace BlobSync
             // look at all blobs and place them in the correct category
             await foreach (var item in blobs)
             {
-                //var blockBlob = container.GetBlobClient(item.Name);
                 seenBlobNames.Add(item.Name);
-
-                //var blobProperties = blockBlob.GetProperties().Value;
 
                 // does the file exist?
                 var localPath = Path.Combine(LocalPath, item.Name);

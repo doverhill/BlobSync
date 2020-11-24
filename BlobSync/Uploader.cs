@@ -46,7 +46,7 @@ namespace BlobSync
                 foreach (var onlyRemote in syncInfo.OnlyRemote)
                 {
                     // this file exists only as a blob, delete the blob
-                    Console.WriteLine($"Deleting blob {onlyRemote.Name}...");
+                    Console.WriteLine($"Deleting remote {onlyRemote.Name}...");
                     var blob = container.GetBlobClient(onlyRemote.Name);
                     await blob.DeleteIfExistsAsync();
                 }
@@ -55,7 +55,7 @@ namespace BlobSync
             foreach (var differs in syncInfo.Differs)
             {
                 // this file exists also as a blob but differs, upload and overwrite
-                await PushFile("Updating", localPath, contentTypeMappings, differs.Blob);
+                await PushFile("Updating remote", localPath, contentTypeMappings, differs.Blob);
             }
 
             foreach (var onlyLocal in syncInfo.OnlyLocal)
@@ -69,7 +69,7 @@ namespace BlobSync
                 foreach (var identical in syncInfo.Identical)
                 {
                     // this file exists also as a blob and is identical, don't do anything
-                    await PushFile("Force updating", localPath, contentTypeMappings, identical.Blob);
+                    await PushFile("Force updating remote", localPath, contentTypeMappings, identical.Blob);
                 }
             }
         }
@@ -82,7 +82,7 @@ namespace BlobSync
                 await blob.UploadAsync(localFile, overwrite: true);
             }
             var contentType = await ApplyProperties(blob, contentTypeMappings);
-            Console.WriteLine($"{verb} blob {blob.Name} [{contentType}]...");
+            Console.WriteLine($"{verb} {blob.Name} [{contentType}]...");
         }
 
         private static async Task PushFile(string verb, string localPath, Dictionary<string, string> contentTypeMappings, BlobContainerClient container, FileData file)
@@ -93,7 +93,7 @@ namespace BlobSync
                 await blob.UploadAsync(localFile, overwrite: true);
             }
             var contentType = await ApplyProperties(blob, contentTypeMappings);
-            Console.WriteLine($"{verb} blob {file.Name} [{contentType}]...");
+            Console.WriteLine($"{verb} {file.Name} [{contentType}]...");
         }
 
         private static async Task<string> ApplyProperties(BlobClient blob, Dictionary<string, string> contentTypeMappings)
