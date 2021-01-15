@@ -15,10 +15,10 @@ namespace BlobSync
             Force = 2
         }
 
-        public static async Task Sync(string connectionString, string connectionUrl, string containerName, string localPath, SyncSettings settings)
+        public static async Task<bool> Sync(string connectionString, string connectionUrl, string containerName, string localPath, SyncSettings settings, bool verbose)
         {
             var sync = new BlobSyncCore(connectionString, connectionUrl, containerName, localPath);
-            var syncInfo = await sync.GetSyncInfoAsync();
+            var syncInfo = await sync.GetSyncInfoAsync(verbose);
 
             BlobServiceClient client;
             if (connectionUrl != null)
@@ -48,8 +48,10 @@ namespace BlobSync
             {
                 Console.WriteLine($"Updating local {differs.Blob.Name}...");
                 var blob = container.GetBlobClient(differs.Blob.Name);
+                var path = Path.Combine(localPath, differs.Blob.Name);
 
-                using (var file = File.OpenWrite(Path.Combine(localPath, differs.Blob.Name)))
+                File.Delete(path);
+                using (var file = File.OpenWrite(path))
                 {
                     await blob.DownloadToAsync(file);
                 }
@@ -63,6 +65,8 @@ namespace BlobSync
                     File.Delete(Path.Combine(localPath, onlyLocal.Name));
                 }
             }
+
+            return sync.Verify(syncInfo, verbose);
         }
     }
 }

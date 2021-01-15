@@ -17,7 +17,7 @@ namespace BlobSync
             Force = 2
         }
 
-        public static async Task Sync(string connectionString, string connectionUrl, string containerName, string localPath, SyncSettings settings)
+        public static async Task Sync(string connectionString, string connectionUrl, string containerName, string localPath, SyncSettings settings, bool verbose)
         {
             var contentTypeMappings = new Dictionary<string, string>
             {
@@ -28,7 +28,7 @@ namespace BlobSync
             };
 
             var sync = new BlobSyncCore(connectionString, connectionUrl, containerName, localPath);
-            var syncInfo = await sync.GetSyncInfoAsync();
+            var syncInfo = await sync.GetSyncInfoAsync(verbose);
 
             BlobServiceClient client;
             if (connectionUrl != null)

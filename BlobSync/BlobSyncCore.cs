@@ -10,10 +10,10 @@ namespace BlobSync
 {
     public class BlobSyncCore
     {
-        private string ConnectionString;
-        private string ConnectionUrl;
-        private string ContainerName;
-        private string LocalPath;
+        private readonly string ConnectionString;
+        private readonly string ConnectionUrl;
+        private readonly string ContainerName;
+        private readonly string LocalPath;
 
         public BlobSyncCore(string connectionString, string connectionUrl, string containerName, string localPath)
         {
@@ -48,7 +48,38 @@ namespace BlobSync
             await blob.UploadAsync(stream, overwrite: true);
         }
 
-        public async Task<BlobSyncInfo> GetSyncInfoAsync()
+        public bool Verify(BlobSyncInfo syncInfo, bool verbose)
+        {
+            foreach (var item in syncInfo.AllRemoteItems)
+            {
+                if (verbose)
+                {
+                    Console.WriteLine("Verifying " + item.Name);
+                    Console.WriteLine("  [REMOTE: " + Convert.ToBase64String(item.Properties.ContentHash) + " " + item.Properties.ContentLength + "]");
+                }
+
+                // does the file exist?
+                var localPath = Path.Combine(LocalPath, item.Name);
+                if (File.Exists(localPath))
+                {
+                    var fileInfo = GetFileData(LocalPath, localPath);
+                    if (verbose) Console.WriteLine("  [LOCAL:  " + fileInfo.MD5 + " " + fileInfo.Length + " " + fileInfo.LastModified + " " + localPath + "]");
+                    if (fileInfo.MD5 != Convert.ToBase64String(item.Properties.ContentHash) || fileInfo.Length != item.Properties.ContentLength)
+                    {
+                        if (verbose) Console.WriteLine("  STILL DIFFERS!");
+                        return false;
+                    }
+                }
+                else
+                {
+                    if (verbose) Console.WriteLine("  NOT FOUND!");
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        public async Task<BlobSyncInfo> GetSyncInfoAsync(bool verbose)
         {
             BlobServiceClient client;
 
@@ -69,7 +100,14 @@ namespace BlobSync
             // look at all blobs and place them in the correct category
             await foreach (var item in blobs)
             {
+                syncInfo.AllRemoteItems.Add(item);
                 seenBlobNames.Add(item.Name);
+
+                if (verbose)
+                {
+                    Console.WriteLine(item.Name);
+                    Console.WriteLine("  [REMOTE: " + Convert.ToBase64String(item.Properties.ContentHash) + " " + item.Properties.ContentLength + " " + item.Properties.LastModified + "]");
+                }
 
                 // does the file exist?
                 var localPath = Path.Combine(LocalPath, item.Name);
@@ -77,20 +115,24 @@ namespace BlobSync
                 {
                     // is the same? look at length and md5
                     var fileInfo = GetFileData(LocalPath, localPath);
+                    if (verbose) Console.Write("  [LOCAL:  " + fileInfo.MD5 + " " + fileInfo.Length + " " + fileInfo.LastModified + " " + localPath + "]: ");
                     if (fileInfo.MD5 == Convert.ToBase64String(item.Properties.ContentHash) &&
                         fileInfo.Length == item.Properties.ContentLength)
                     {
+                        if (verbose) Console.WriteLine("MATCH");
                         var blockBlob = container.GetBlobClient(item.Name);
                         syncInfo.Identical.Add((blockBlob, fileInfo));
                     }
                     else
                     {
+                        if (verbose) Console.WriteLine("DIFFER");
                         var blockBlob = container.GetBlobClient(item.Name);
                         syncInfo.Differs.Add((blockBlob, fileInfo));
                     }
                 }
                 else
                 {
+                    if (verbose) Console.WriteLine("[LOCAL:  NOT FOUND]");
                     // file does not exist locally
                     var blockBlob = container.GetBlobClient(item.Name);
                     syncInfo.OnlyRemote.Add(blockBlob);
@@ -98,8 +140,10 @@ namespace BlobSync
             }
 
             // look at all files, identify those that have no corresponding blob and put them in the onlyLocal category
-            var options = new EnumerationOptions();
-            options.RecurseSubdirectories = true;
+            var options = new EnumerationOptions
+            {
+                RecurseSubdirectories = true
+            };
             foreach (var filePath in Directory.EnumerateFiles(LocalPath, "*", options))
             {
                 var fileName = Path.GetRelativePath(LocalPath, filePath).Replace("\\", "/");
@@ -114,13 +158,14 @@ namespace BlobSync
             return syncInfo;
         }
 
-        private FileData GetFileData(string basePath, string localPath)
+        private static FileData GetFileData(string basePath, string localPath)
         {
             var fileData = new FileData();
 
             var fileInfo = new FileInfo(localPath);
             fileData.Name = Path.GetRelativePath(basePath, localPath);
             fileData.Length = fileInfo.Length;
+            fileData.LastModified = fileInfo.LastWriteTimeUtc;
 
             using (var md5 = MD5.Create())
             {
