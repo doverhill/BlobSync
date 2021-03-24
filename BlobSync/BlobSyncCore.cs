@@ -132,7 +132,7 @@ namespace BlobSync
                 }
                 else
                 {
-                    if (verbose) Console.WriteLine("[LOCAL:  NOT FOUND]");
+                    if (verbose) Console.WriteLine("  [LOCAL:  NOT FOUND]");
                     // file does not exist locally
                     var blockBlob = container.GetBlobClient(item.Name);
                     syncInfo.OnlyRemote.Add(blockBlob);
