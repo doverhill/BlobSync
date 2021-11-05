@@ -61,7 +61,7 @@ namespace BlobSync
             {
                 foreach (var onlyLocal in syncInfo.OnlyLocal)
                 {
-                    Console.WriteLine($"Deleting local {onlyLocal}...");
+                    Console.WriteLine($"Deleting local {onlyLocal.Name}...");
                     File.Delete(Path.Combine(localPath, onlyLocal.Name));
                 }
             }
