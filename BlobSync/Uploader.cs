@@ -17,7 +17,7 @@ namespace BlobSync
             Force = 2
         }
 
-        public static async Task Sync(string connectionString, string connectionUrl, string containerName, string localPath, SyncSettings settings, bool verbose)
+        public static async Task Sync(string connectionString, string connectionUrl, string containerName, string localPath, SyncSettings settings, bool verbose, Func<string, string> preprocessBeforeContentTypeCheck)
         {
             var contentTypeMappings = new Dictionary<string, string>
             {
@@ -55,13 +55,13 @@ namespace BlobSync
             foreach (var differs in syncInfo.Differs)
             {
                 // this file exists also as a blob but differs, upload and overwrite
-                await PushFile("Updating remote", localPath, contentTypeMappings, differs.Blob);
+                await PushFile("Updating remote", localPath, contentTypeMappings, differs.Blob, preprocessBeforeContentTypeCheck);
             }
 
             foreach (var onlyLocal in syncInfo.OnlyLocal)
             {
                 // this file exists only locally so upload it as a blob
-                await PushFile("Uploading", localPath, contentTypeMappings, container, onlyLocal);
+                await PushFile("Uploading", localPath, contentTypeMappings, container, onlyLocal, preprocessBeforeContentTypeCheck);
             }
 
             if (settings.HasFlag(SyncSettings.Force))
@@ -69,36 +69,37 @@ namespace BlobSync
                 foreach (var identical in syncInfo.Identical)
                 {
                     // this file exists also as a blob and is identical, don't do anything
-                    await PushFile("Force updating remote", localPath, contentTypeMappings, identical.Blob);
+                    await PushFile("Force updating remote", localPath, contentTypeMappings, identical.Blob, preprocessBeforeContentTypeCheck);
                 }
             }
         }
 
-        private static async Task PushFile(string verb, string localPath, Dictionary<string, string> contentTypeMappings, BlobClient blob)
+        private static async Task PushFile(string verb, string localPath, Dictionary<string, string> contentTypeMappings, BlobClient blob, Func<string, string> preprocessBeforeContentTypeCheck)
         {
             //var blob = container.GetBlockBlobReference(obj.Name);
             using (var localFile = File.OpenRead(Path.Combine(localPath, blob.Name)))
             {
                 await blob.UploadAsync(localFile, overwrite: true);
             }
-            var contentType = await ApplyProperties(blob, contentTypeMappings);
+            var contentType = await ApplyProperties(blob, contentTypeMappings, preprocessBeforeContentTypeCheck);
             Console.WriteLine($"{verb} {blob.Name} [{contentType}]...");
         }
 
-        private static async Task PushFile(string verb, string localPath, Dictionary<string, string> contentTypeMappings, BlobContainerClient container, FileData file)
+        private static async Task PushFile(string verb, string localPath, Dictionary<string, string> contentTypeMappings, BlobContainerClient container, FileData file, Func<string, string> preprocessBeforeContentTypeCheck)
         {
             var blob = container.GetBlobClient(file.Name);
             using (var localFile = File.OpenRead(Path.Combine(localPath, file.Name)))
             {
                 await blob.UploadAsync(localFile, overwrite: true);
             }
-            var contentType = await ApplyProperties(blob, contentTypeMappings);
+            var contentType = await ApplyProperties(blob, contentTypeMappings, preprocessBeforeContentTypeCheck);
             Console.WriteLine($"{verb} {file.Name} [{contentType}]...");
         }
 
-        private static async Task<string> ApplyProperties(BlobClient blob, Dictionary<string, string> contentTypeMappings)
+        private static async Task<string> ApplyProperties(BlobClient blob, Dictionary<string, string> contentTypeMappings, Func<string, string> preprocessBeforeContentTypeCheck)
         {
-            var suffix = Path.GetExtension(blob.Name);
+            var name = preprocessBeforeContentTypeCheck != null ? preprocessBeforeContentTypeCheck(blob.Name) : blob.Name;
+            var suffix = Path.GetExtension(name);
             string contentType = null;
             if (contentTypeMappings.ContainsKey(suffix))
             {
