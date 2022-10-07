@@ -18,7 +18,7 @@ namespace BlobSync
         public static async Task<bool> Sync(string connectionString, string connectionUrl, string containerName, string localPath, SyncSettings settings, bool verbose)
         {
             var sync = new BlobSyncCore(connectionString, connectionUrl, containerName, localPath);
-            var syncInfo = await sync.GetSyncInfoAsync(verbose);
+            var syncInfo = await sync.GetSyncInfoAsync(verbose, true);
 
             BlobServiceClient client;
             if (connectionUrl != null)

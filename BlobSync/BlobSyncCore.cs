@@ -79,7 +79,7 @@ namespace BlobSync
             return true;
         }
 
-        public async Task<BlobSyncInfo> GetSyncInfoAsync(bool verbose)
+        public async Task<BlobSyncInfo> GetSyncInfoAsync(bool verbose, bool recursive)
         {
             BlobServiceClient client;
 
@@ -142,7 +142,7 @@ namespace BlobSync
             // look at all files, identify those that have no corresponding blob and put them in the onlyLocal category
             var options = new EnumerationOptions
             {
-                RecurseSubdirectories = true
+                RecurseSubdirectories = recursive
             };
             foreach (var filePath in Directory.EnumerateFiles(LocalPath, "*", options))
             {

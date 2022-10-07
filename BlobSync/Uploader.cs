@@ -14,7 +14,8 @@ namespace BlobSync
         {
             Default = 0,
             Delete = 1,
-            Force = 2
+            Force = 2,
+            Recursive = 4
         }
 
         public static async Task Sync(string connectionString, string connectionUrl, string containerName, string localPath, SyncSettings settings, bool verbose, Func<string, string> preprocessBeforeContentTypeCheck)
@@ -28,7 +29,7 @@ namespace BlobSync
             };
 
             var sync = new BlobSyncCore(connectionString, connectionUrl, containerName, localPath);
-            var syncInfo = await sync.GetSyncInfoAsync(verbose);
+            var syncInfo = await sync.GetSyncInfoAsync(verbose, settings.HasFlag(SyncSettings.Recursive));
 
             BlobServiceClient client;
             if (connectionUrl != null)
